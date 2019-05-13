@@ -1,3 +1,9 @@
+#### This program takes in a (set of) .ROOT files and performs a PE fit and calculates NPE and PDE and their associated errors.
+#### There are 2 output files of the NPE/PDE parameters
+#### These are to be plugged into the spreadsheet for "manual" calculation of the NPE/PDE and the associated uncertainties of the calculations/measurements.
+
+####Use * (wildcard) to run through a series of .ROOT files.
+
 ####.ROOT FILE Nomenclature for parsing:
 # EX: 09-28-18-D15-Ch12-1300dac-57_0V-1_250nA
 #[0]: Month; MM
@@ -21,7 +27,8 @@ import argparse
 import numpy
 import math
 
-
+####Various definitions for rounding up/down to different levels of precision
+####Used in the setting of axis values/limits for the graphing
 def roundup(x, n):
     return int(math.ceil(x/(1.0*(10**n)))*(1.0*(10**n)))
 
@@ -50,12 +57,12 @@ parser.add_argument("-o", "--output", default=0, help = "Set file name for outpu
 parser.add_argument("-u", "--uncert", default=0, help = "Set custom uncertainty value for NPE fit (added in quadrature)")
 
 
-##Output file for fit parameters and values for calculating
-
 args = parser.parse_args()
 calib=args.calib
 output = args.output
 
+
+####Declaration of constants and arrays
 vbias=[]
 refcurrent=[]
 picorange=[]
@@ -64,7 +71,7 @@ vex=[]
 v_ov=[]
 params=[]
 freq=10000.0
-ratio = 4633.39
+ratio = 4636.32
 resp = .427085
 wlen = 660E-9
 h = 6.62607E-34
@@ -91,7 +98,8 @@ phot_e_unc = (wlen_unc/wlen)*phot_e
 ######Not sure why it won't take the value here, needs it in the if statement.
 #current_unc = 0.03
 freq_unc = 500.0
-ratio_unc = 62.1828
+ratio_unc = 62.22116
+
 fre = freq*resp*phot_e
 
 ## Vbias uncertainty: +/- 0.015% + 2.4mV
@@ -107,6 +115,7 @@ if(args.uncert):
 else:
     custom_unc = 0
 
+####Uncertainty arrays
 refcurr_unc = []
 nphot_ref_unc = []
 nphot_test_unc = []
@@ -116,6 +125,7 @@ vbias_unc = []
 vex_unc = []
 gain_unc = []
 
+####Arrays for the (NPE) fit parameters
 a0 = []
 a0_err = []
 n0 = []
@@ -130,13 +140,19 @@ hPhD_GetEntries = []
 hPhD0_BinWidth = []
 hPhD0_Integral = []
 
+##Output file for fit parameters and values for calculating
+##One file is a reader-friendly version, the other is strictly for copying into a spreadsheet
+
 if (args.output):
     print "output file name is: " + args.output
     file = open(args.output, "w+")
+    file_copy = open("for_copying_" +args.output, "w+")
 
 else:
     file = open("pde_parameters.txt", "w+")
+    file_copy = open("for_coyping_pde_parameters.txt", "w")
 
+####Write values to the output file
 file.writelines("Frequency:                     %d\n" % freq)
 file.writelines("Frequency Uncertainty:         %d\n" % freq_unc)
 file.writelines("Wavelength:                    %e\n" % wlen)
@@ -145,6 +161,8 @@ file.writelines("Responsitivity:                %f\n" % resp)
 #file.writelines("PiN Current Uncertainty:       %f\n\n" % current_unc)
 
 print "Ref. current to photons calibration",calib
+
+####Define graphs
 tgGain=TGraphErrors()
 tgGain.SetTitle("Gain vs. Vbias;Vbias [V];Gain [arbitrary units]")
 
@@ -158,6 +176,8 @@ tgVex=TGraphErrors()
 tgNoise=TGraphErrors()
 
 tgENF=TGraphErrors()
+
+####Parse the variables/values from the input files
 
 for fn in args.files:
     print fn
@@ -183,6 +203,9 @@ for i in range(len(args.files)):
     
     file.write('**********************************************\n\n')
     file.writelines("%s \n" % args.files[i])
+    
+    file_copy.write('**********************************************\n\n')
+    file_copy.writelines("%s \n" % args.files[i])
 
     tf=TFile(args.files[i])
     hLight=tf.Get("hpulses1")
@@ -195,7 +218,7 @@ for i in range(len(args.files)):
         hDark.Draw("same")
 
     ana=PhDAnalyzier(hLight.Clone(),hDark.Clone())
-
+###NPE value comes from the PhDAnalyzier in pdeTest as an array:
 ###npe[0] = NPE calc; npe[1] = NPE Uncertainty; npe[2] = hPhD0_Integral
     npe=ana.CalcNpe()
     a0_list = ana.GetA0()
@@ -236,7 +259,7 @@ for i in range(len(args.files)):
     hPhD0_BinWidth.append(ana.GethPhD0_BinWidth())
     hPhD0_Integral.append(ana.GethPhD0_Integral())
 
-####Calculated NPE Values
+####Calculated NPE Values from the fit parameters ("manual" calculation)
     npe_calc = -log(a0_list[0]*sqrt(2*pi)*n0_list[0]/(hPhD_BinWidth[0]*hPhD_GetEntries[0])) + log(a1_list[0]*sqrt(2*pi)*n1_list[0]/(hPhD0_BinWidth[0]*npe[2]))
 
 ###Write the parameters out to a file
@@ -254,11 +277,30 @@ for i in range(len(args.files)):
     file.writelines("hPhD0 Bin Width:       %s \n" % hPhD0_BinWidth[0])
     file.writelines("hPhD0 Integral:        %s \n\n" % npe[2])
 
+####Write the parameters out to a file for easy copy/pasting into a spreadsheet
+    file_copy.writelines("\n %s \n" % a0_list[0])
+    file_copy.writelines(" %s \n" % a0_list[1])
+    file_copy.writelines(" %s \n" % n0_list[0])
+    file_copy.writelines(" %s \n" % n0_list[1])
+    file_copy.writelines(" %s \n" % hPhD_BinWidth[0])
+    file_copy.writelines(" %s \n\n" % hPhD_GetEntries[0])
+    
+    file_copy.writelines(" %s \n" % a1_list[0])
+    file_copy.writelines(" %s \n" % a1_list[1])
+    file_copy.writelines(" %s \n" % n1_list[0])
+    file_copy.writelines(" %s \n" % n1_list[1])
+    file_copy.writelines(" %s \n\n" % npe[2])
+
     if (args.uncert) or not(custom_unc == 0):
         file.writelines("Custom uncertainty:    %s \n\n" % custom_unc)
+        file_copy.writelines("Custom uncertainty:    %s \n\n" % custom_unc)
 
     if (args.plotAll): raw_input("Press Enter to continue...")
 
+    file.close
+    file_copy.close
+
+####Get gain values and set for plotting
     gain_raw=ana.GetGain()
     gain = gain_raw[0]*picorange[i]/100 # scale all gains to 100 mV range
     gain_err = gain_raw[1]*picorange[i]/100 # scale all gain errors to 100 mV range
@@ -267,10 +309,11 @@ for i in range(len(args.files)):
 
     row=[sys.argv[1],npe,ana.GetNoise(),ana.GetGain(),ana.GetENF(),tf.Get("hRange").GetBinContent(1)]
     
-
+####Fill NPE and uncertainty values
     npeval.append(npe[0]) #Fill NPE array
     npe_unc.append(sqrt((npe[1]**2) + (custom_unc**2))) #Fill NPE uncertainty array plus Custom Unc.
 
+####Fill gain, noise, and ENF values/uncertainties into the arrays
     gain_arr.append(gain) #Fill Gain array
     gain_err_arr.append(gain_err)
     noise_raw = ana.GetNoise()
@@ -288,17 +331,16 @@ tgGain.Fit("pol1", "P", "", vbias[0], vbias[len(vbias)-1])
 
 func = tgGain.GetFunction("pol1")
 
-#Determine x-intercept -> V_breakdown
+#Determine V_BR from x-intercept -> V_breakdown
 p0 = func.GetParameter(0);
 p0_err = func.GetParError(0);
 p1 = func.GetParameter(1);
 p1_err = func.GetParError(1);
 
-
 vbr =  -round(p0/p1,2)
 vbr_unc = vbr*sqrt(((p0_err/p0)**2) + ((p1_err/p1)**2))
 
-
+###Using the last y-value for plotting the linear line for V_BR
 ylast = round(p1*(vbias[len(vbias)-1])+p0,2)
 
 #Define points of extrapolated line
@@ -307,7 +349,6 @@ vbr_fit = [(vbr,0), vbias[len(vbias)-1],ylast]
 #vbr_x =[vbr, vbias[(len(vbias)-1)]]
 vbr_x = [vbr, ((ylast - p0)/(p1))]
 vbr_y =[0, ylast]
-
 
 #Set points to draw extrapolated V_br line
 for i in range(len(vbr_x)):
